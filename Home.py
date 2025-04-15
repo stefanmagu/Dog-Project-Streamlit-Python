@@ -1,5 +1,6 @@
 import pandas as pd
 import streamlit as st
+
 from date_out.date import getDate
 import matplotlib.pyplot as plt
 import plotly.express as px
@@ -7,6 +8,12 @@ import wordcloud as wc
 import seaborn as sns
 import math
 import geopandas as gpd
+import numpy as np
+
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
+from sklearn.metrics import silhouette_score
 
 df = getDate()
 
@@ -37,7 +44,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-section = st.sidebar.radio("Navigate to:", ["Search for dog", "Descriptive Analysis","GeoPandas"])
+section = st.sidebar.radio("Navigate to:", ["Search for dog", "Descriptive Analysis", "GeoPandas", "Clustering"])
 
 if section == "Search for dog":
     st.header("Search for dog")
@@ -82,7 +89,6 @@ if section == "Search for dog":
         st.subheader("Description")
         st.write(row["description"].values[0])
         st.subheader("Breed Traits & Characteristics")
-
 
         tab1, tab2, tab3, tab4 = st.tabs(["Family Life", "Physical", "Social", "Personality"])
         level_labels = {
@@ -205,7 +211,8 @@ elif section == "Descriptive Analysis":
     # mean
     st.subheader("Mean grades")
     st.bar_chart(df_grades.describe().loc["mean"], x_label="Mean Grades", horizontal=True)
-    st.html('<p style="color:blue;">Most dog breeds are affectionate with family members, with an average score of 4.5 out of 5</p>')
+    st.html(
+        '<p style="color:blue;">Most dog breeds are affectionate with family members, with an average score of 4.5 out of 5</p>')
 
     c1, c2 = st.columns(2)
     with c1:
@@ -241,7 +248,6 @@ elif section == "Descriptive Analysis":
         df.groupby("Breed")[["min_expectancy", "max_expectancy"]].mean().mean(axis=1).sort_values(ascending=False).head(
             5).rename("Average Life Expectancy"))
 
-
     # MOST USED WORDS in description
     st.subheader("Most used words in description")
     text = " ".join(df["description"])
@@ -249,7 +255,6 @@ elif section == "Descriptive Analysis":
     plt.imshow(wc, interpolation='bilinear')
     plt.axis('off')
     st.pyplot(fig=plt)
-
 
     # CORRELATION MATRIX
     numerical_cols = df_grades.drop(columns=["Total"]).columns
@@ -273,7 +278,6 @@ elif section == "Descriptive Analysis":
 
             </ul>    
             """)
-
 
     # HISTOGRAMS - FREQUENCY DISTRIBUTION
     st.subheader("Frequency distribution of grades")
@@ -324,7 +328,6 @@ elif section == "GeoPandas":
     ax.legend(handles, legend_labels.values(), loc="lower left")
     st.pyplot(fig)
 
-
     # Search for Dog Breed
     st.subheader("Search for dog")
     search = st.selectbox("Select an option", ["Select an option"] + list(world["Name"].dropna().unique()))
@@ -363,6 +366,217 @@ elif section == "GeoPandas":
             st.table(breeds)
         else:
             st.write(f"No known dog breeds from {country_search}.")
+
+elif section == "Clustering":
+    st.title("Hierarchical Cluster Analysis")
+    st.subheader("Clustering breeds based on traits")
+
+
+    # Prelucrare Dataframe
+    df_grades = df.iloc[:, :17].set_index("Breed")
+    df_grades.drop(columns=["Coat Type", "Coat Length"], inplace=True)
+    st.dataframe(df_grades)
+    # Clustering
+
+    # Standardizare
+    scaler = StandardScaler()
+    scaled_data = scaler.fit_transform(df_grades)
+
+    # KMeans Clustering
+    inertia = []
+    for i in range(1, 11):
+        kmeans = KMeans(n_clusters=i, random_state=42)
+        kmeans.fit(scaled_data)
+        inertia.append(kmeans.inertia_)
+    # plot the elbow method
+    plt.figure(figsize=(8, 5))
+    plt.plot(range(1, 11), inertia, marker='o')
+    plt.title('Elbow Method for Optimal k')
+    plt.xlabel('Number of clusters')
+    plt.ylabel('Sum of squared distances')
+    plt.xticks(range(1, 11))
+    plt.grid()
+    st.pyplot(fig=plt)
+
+    Z = linkage(scaled_data, method='ward')
+
+    # Determinare partitie optimala
+    distances = Z[:, 2]
+
+    differences = np.diff(distances)
+
+    optimal_idx = np.argmax(differences) + 1
+    optimal_k = len(Z) - optimal_idx + 1
+    st.markdown(
+        f"""
+        <div style="background-color: #f0f0f0; padding: 10px; border-radius: 5px;">
+            <h4 style="color: #333;">Optimal number of clusters Elbow: {optimal_k}</h4>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    clusters_optimal = fcluster(Z, optimal_k, criterion='maxclust')
+
+    silhouette_avg = silhouette_score(scaled_data, clusters_optimal)
+    st.markdown(
+        f"""
+        <div style="background-color: #f0f0f0; padding: 10px; border-radius: 5px;">
+            <h4 style="color: #333;">Silhouette Score for optimal clusters: {silhouette_avg:.2f}</h4>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        f"""
+        <div style = "padding: 10px; border-radius: 5px;">
+            <h4 style="color: gray;">Silhouette scores range from -1 to 1.<br></br>
+            The highest silhouette score obtained is {silhouette_avg:.2f} with 2 clusters, indicating very weak cluster separation. Such a low score suggests that the data points are not clearly grouped and may lie close to the boundaries between clusters.</h4>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # plot the dendrogram
+    plt.figure(figsize=(12, 8))
+    dendrogram(Z, labels=df_grades.index, leaf_rotation=90, color_threshold=Z[optimal_idx,2])
+    plt.title('Dendrogram - Ward Linkage', fontsize=16)
+    plt.xlabel('Dog Breeds')
+    plt.ylabel('Distance')
+    plt.grid()
+    st.pyplot(fig=plt)
+
+    ########################## KMeans Cluster Analysis ####################
+    # add a space
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    st.header("KMeans Cluster Analysis")
+    df_weight_height = df[["Breed","max_weight", "max_height"]].set_index("Breed")
+    st.dataframe(df_weight_height)
+    # Standardizare
+    scaler = StandardScaler()
+    scaled_data = scaler.fit_transform(df_weight_height)
+    # KMeans Clustering
+    inertia = []
+    for i in range(1, 11):
+        kmeans = KMeans(n_clusters=i, random_state=42)
+        kmeans.fit(scaled_data)
+        inertia.append(kmeans.inertia_)
+    # plot the elbow method
+    plt.figure(figsize=(8, 5))
+    plt.plot(range(1, 11), inertia, marker='o')
+    plt.title('Elbow Method for Optimal k')
+    plt.xlabel('Number of clusters')
+    plt.ylabel('Sum of squared distances')
+    plt.xticks(range(1, 11))
+    plt.grid()
+    st.pyplot(fig=plt)
+
+    Z = linkage(scaled_data, method='ward')
+
+    # optimal distances
+    distances = Z[:, 2]
+
+    differences = np.diff(distances)
+
+    optimal_idx = np.argmax(differences) + 1
+    optimal_k = len(Z) - optimal_idx + 1
+    st.markdown(
+        f"""
+           <div style="background-color: #f0f0f0; padding: 10px; border-radius: 5px;">
+               <h4 style="color: #333;">Optimal number of clusters Elbow: {optimal_k}</h4>
+           </div>
+           """,
+        unsafe_allow_html=True
+    )
+
+    clusters_optimal = fcluster(Z, optimal_k, criterion='maxclust')
+
+    silhouette_avg = silhouette_score(scaled_data, clusters_optimal)
+    st.markdown(
+        f"""
+           <div style="background-color: #f0f0f0; padding: 10px; border-radius: 5px;">
+               <h4 style="color: #333;">Silhouette Score for optimal clusters: {silhouette_avg:.2f}</h4>
+           </div>
+           """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        f"""
+           <div style = "padding: 10px; border-radius: 5px;">
+               <h4 style="color: gray;">Silhouette scores range from -1 to 1.<br></br>
+               The highest silhouette score obtained is {silhouette_avg:.2f} with 2 clusters, indicating very weak cluster separation. Such a low score suggests that the data points are not clearly grouped and may lie close to the boundaries between clusters.</h4>
+           </div>
+           """,
+        unsafe_allow_html=True
+    )
+
+    #scatter plot
+    plt.figure(figsize=(12, 8))
+    plt.scatter(df_weight_height["max_weight"], df_weight_height["max_height"], c=clusters_optimal, cmap='viridis')
+    plt.title('KMeans Clustering of Dog Breeds')
+    plt.xlabel('Max Weight')
+    plt.ylabel('Max Height')
+    plt.grid()
+    st.pyplot(fig=plt)
+    # Add cluster labels to the DataFrame
+    df_weight_height["Cluster"] = clusters_optimal
+    # Display the DataFrame with cluster labels
+    st.subheader("Dog Breeds with Cluster Labels")
+    st.dataframe(df_weight_height)
+    # Display the number of breeds in each cluster
+    st.subheader("Number of Breeds in Each Cluster")
+    cluster_counts = df_weight_height["Cluster"].value_counts()
+    st.dataframe(cluster_counts)
+    # Display the average weight and height for each cluster
+    st.subheader("Average Weight and Height for Each Cluster")
+    cluster_means = df_weight_height.groupby("Cluster").mean()
+    st.dataframe(cluster_means)
+
+
+
+
+    # make Simple Regression Analysis with independent variable max_height and dependent max_expectancy
+    import statsmodels.api as sm
+
+    # Define independent and dependent variables
+    X = df[["max_height"]]  # independent variable
+    y = df["max_expectancy"]  # dependent variable
+
+    # Add constant term to the model
+    X = sm.add_constant(X)
+    model = sm.OLS(y, X).fit()
+
+    # Display regression summary
+    st.subheader("Simple Regression Analysis")
+    st.write(model.summary())
+
+    # Plot the regression line
+    plt.figure(figsize=(12, 8))
+    plt.scatter(df["max_height"], df["max_expectancy"], color='blue', label='Data Points')
+    plt.plot(df["max_height"], model.predict(X), color='red', label='Regression Line')
+    plt.title('Simple Regression Analysis')
+    plt.xlabel('Max Height')
+    plt.ylabel('Max Expectancy')
+    plt.legend()
+
+    # Display plot in Streamlit
+    st.pyplot(fig=plt)
+
+    # make Simple Regression Analysis with independent variable max_height, max_weight and dependent max_expectancy using smf
+    import statsmodels.formula.api as smf
+
+    # Fit the multiple linear regression model using a formula
+    model_multi = smf.ols(formula='max_expectancy ~ max_height + max_weight', data=df).fit()
+
+    # Display regression summary
+    st.subheader("Multiple Regression Analysis")
+    st.write(model_multi.summary())
+
+
+
 
 
 
