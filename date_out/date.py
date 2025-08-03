@@ -4,7 +4,7 @@ def getDate():
     # citire fisiere
     df_traits = pd.read_csv("date_in/breed_traits.csv")
     df_rank = pd.read_csv("date_in/breed_rank.csv")
-    df_descriptions = pd.read_csv("date_in/akc-data-latest (1).csv")
+    df_descriptions = pd.read_csv("date_in/akc-data-latest.csv")
 
     # rezolvare spatiere incorecta a fisierului exportat
     df_traits = df_traits.applymap(lambda x: x.replace("\u00a0", " ") if isinstance(x, str) else x)

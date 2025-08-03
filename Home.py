@@ -507,7 +507,7 @@ elif section == "Clustering":
         f"""
            <div style = "padding: 10px; border-radius: 5px;">
                <h4 style="color: gray;">Silhouette scores range from -1 to 1.<br></br>
-               The highest silhouette score obtained is {silhouette_avg:.2f} with 2 clusters, indicating very weak cluster separation. Such a low score suggests that the data points are not clearly grouped and may lie close to the boundaries between clusters.</h4>
+               The highest silhouette score obtained is {silhouette_avg:.2f} with 2 clusters, indicating a moderate level of cluster separation. This score suggests that the data points show some degree of cohesion within clusters and a reasonable separation between them, although not very strong.</h4>
            </div>
            """,
         unsafe_allow_html=True
@@ -574,11 +574,4 @@ elif section == "Clustering":
     # Display regression summary
     st.subheader("Multiple Regression Analysis")
     st.write(model_multi.summary())
-
-
-
-
-
-
-
 
